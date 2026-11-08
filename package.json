@@ -1,0 +1,12 @@
+{
+  "name": "diwali-website",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "serve": "npx http-server -p 5173 ."
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
