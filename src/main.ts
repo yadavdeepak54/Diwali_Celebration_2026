@@ -29,11 +29,19 @@ class Sound {
   on = true;
   private ctx: AudioContext | null = null;
   private bgMusic: HTMLAudioElement | null = null;
+  private frontMusic: HTMLAudioElement | null = null;
+  private masterCompressor: DynamicsCompressorNode | null = null;
+  private masterGain: GainNode | null = null;
+  currentMode: "front" | "celebration" = "front";
 
   constructor() {
+    this.frontMusic = document.querySelector<HTMLAudioElement>("#front-music");
     this.bgMusic = document.querySelector<HTMLAudioElement>("#bg-music");
+    if (this.frontMusic) {
+      this.frontMusic.volume = 0.48; // Clear, divine Ganesh & Lakshmi blessing chant for front page
+    }
     if (this.bgMusic) {
-      this.bgMusic.volume = 0.45;
+      this.bgMusic.volume = 0.35; // Ideal clear, serene background volume for sitar, flute & tabla
     }
   }
 
@@ -41,8 +49,27 @@ class Sound {
     if (!this.ctx) {
       const A = window.AudioContext || (window as any).webkitAudioContext;
       this.ctx = new A();
+
+      // Master Compressor prevents distortion during multiple bursts and adds natural acoustic punch
+      this.masterCompressor = this.ctx.createDynamicsCompressor();
+      this.masterCompressor.threshold.value = -12;
+      this.masterCompressor.knee.value = 10;
+      this.masterCompressor.ratio.value = 6;
+      this.masterCompressor.attack.value = 0.003;
+      this.masterCompressor.release.value = 0.18;
+
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.value = 0.88;
+
+      this.masterCompressor.connect(this.masterGain);
+      this.masterGain.connect(this.ctx.destination);
     }
     return this.ctx!;
+  }
+
+  private get outNode(): AudioNode {
+    this.c; // Ensure audio context and compressor graph are initialized
+    return this.masterCompressor || this.c.destination;
   }
 
   unlock(): void {
@@ -50,25 +77,45 @@ class Sound {
     if (this.ctx && this.ctx.state === "suspended") {
       void this.ctx.resume();
     }
-    this.playMusic();
+    this.playCurrentMusic();
   }
 
-  playMusic(): void {
+  setMode(mode: "front" | "celebration"): void {
+    this.currentMode = mode;
+    if (this.on) {
+      this.playCurrentMusic();
+    }
+  }
+
+  playFrontMusic(): void {
+    if (this.bgMusic && !this.bgMusic.paused) this.bgMusic.pause();
+    if (!this.on || !this.frontMusic) return;
+    if (this.frontMusic.paused) {
+      const p = this.frontMusic.play();
+      if (p !== undefined) p.catch(() => {});
+    }
+  }
+
+  playMainMusic(): void {
+    if (this.frontMusic && !this.frontMusic.paused) this.frontMusic.pause();
     if (!this.on || !this.bgMusic) return;
     if (this.bgMusic.paused) {
       const p = this.bgMusic.play();
-      if (p !== undefined) {
-        p.catch(() => {
-          // Playback will resume after direct user gesture
-        });
-      }
+      if (p !== undefined) p.catch(() => {});
+    }
+  }
+
+  playCurrentMusic(): void {
+    if (this.currentMode === "front") {
+      this.playFrontMusic();
+    } else {
+      this.playMainMusic();
     }
   }
 
   pauseMusic(): void {
-    if (this.bgMusic && !this.bgMusic.paused) {
-      this.bgMusic.pause();
-    }
+    if (this.frontMusic && !this.frontMusic.paused) this.frontMusic.pause();
+    if (this.bgMusic && !this.bgMusic.paused) this.bgMusic.pause();
   }
 
   toggle(): boolean {
@@ -84,105 +131,153 @@ class Sound {
     return this.on;
   }
 
-  // Realistic firecracker burst: ONLY triggered when cracker bursts on screen
-  boom(big = false): void {
+  toggleFrontMusic(): boolean {
+    if (!this.frontMusic) return false;
+    if (this.frontMusic.paused) {
+      this.on = true;
+      this.currentMode = "front";
+      this.playFrontMusic();
+      return true;
+    } else {
+      this.frontMusic.pause();
+      return false;
+    }
+  }
+
+  // Natural firecracker burst: ONLY triggered when cracker bursts on screen
+  boom(big = false, pan = 0): void {
     if (!this.on) return;
     try {
       const c = this.c;
       if (c.state === "suspended") void c.resume();
-      this.synthesizeCracker(big);
+      this.synthesizeCracker(big, pan);
     } catch {
       // Fallback if audio graph fails
     }
   }
 
-  private synthesizeCracker(big: boolean): void {
+  private synthesizeCracker(big: boolean, pan = 0): void {
     const c = this.c;
     const now = c.currentTime;
 
-    // 1. Sharp initial crack / snap (the impact of firecracker explosion)
-    const snapDur = big ? 0.08 : 0.045;
+    // Spatial stereo panning matching cracker's horizontal burst position on screen
+    let panner: StereoPannerNode | null = null;
+    try {
+      if (c.createStereoPanner) {
+        panner = c.createStereoPanner();
+        panner.pan.value = Math.max(-0.85, Math.min(0.85, pan));
+      }
+    } catch {
+      // StereoPannerNode fallback
+    }
+
+    const dest = panner || this.outNode;
+    if (panner) panner.connect(this.outNode);
+
+    // 1. Initial Gunpowder Snap & Crack (Natural high-mid transient)
+    const snapDur = big ? 0.055 : 0.038;
     const snapSamples = Math.floor(c.sampleRate * snapDur);
     const snapBuf = c.createBuffer(1, snapSamples, c.sampleRate);
     const snapData = snapBuf.getChannelData(0);
     for (let i = 0; i < snapSamples; i++) {
-      const env = Math.exp(-i / (snapSamples * 0.2));
+      const env = Math.exp(-i / (snapSamples * 0.16));
       snapData[i] = (Math.random() * 2 - 1) * env;
     }
     const snapSrc = c.createBufferSource();
     snapSrc.buffer = snapBuf;
+
     const snapFilter = c.createBiquadFilter();
     snapFilter.type = "bandpass";
-    snapFilter.frequency.value = rand(1900, 3200);
-    snapFilter.Q.value = 1.1;
+    snapFilter.frequency.value = rand(1500, 2700);
+    snapFilter.Q.value = 1.3;
+
     const snapGain = c.createGain();
-    snapGain.gain.setValueAtTime(big ? 0.85 : 0.55, now);
-    snapGain.gain.exponentialRampToValueAtTime(0.001, now + snapDur);
+    snapGain.gain.setValueAtTime(big ? 0.78 : 0.52, now);
+    snapGain.gain.exponentialRampToValueAtTime(0.0001, now + snapDur);
+
     snapSrc.connect(snapFilter);
     snapFilter.connect(snapGain);
-    snapGain.connect(c.destination);
+    snapGain.connect(dest);
     snapSrc.start(now);
 
-    // 2. Deep low-frequency thump / bass punch
+    // 2. Concussive Bass Thump (Triangle wave pitch sweep)
+    const boomDur = big ? 0.58 : 0.38;
     const osc = c.createOscillator();
     const oscGain = c.createGain();
-    const startFreq = rand(110, 160);
-    const endFreq = rand(28, 42);
-    const boomDur = big ? 0.55 : 0.35;
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(startFreq, now);
-    osc.frequency.exponentialRampToValueAtTime(endFreq, now + boomDur);
-    oscGain.gain.setValueAtTime(big ? 0.55 : 0.32, now);
-    oscGain.gain.exponentialRampToValueAtTime(0.001, now + boomDur);
-    osc.connect(oscGain);
-    oscGain.connect(c.destination);
+    const oscFilter = c.createBiquadFilter();
+    oscFilter.type = "lowpass";
+    oscFilter.frequency.value = rand(130, 190);
+
+    osc.type = "triangle";
+    const startPitch = rand(135, 190);
+    const endPitch = rand(30, 42);
+    osc.frequency.setValueAtTime(startPitch, now);
+    osc.frequency.exponentialRampToValueAtTime(endPitch, now + boomDur);
+
+    oscGain.gain.setValueAtTime(big ? 0.55 : 0.35, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.0001, now + boomDur);
+
+    osc.connect(oscFilter);
+    oscFilter.connect(oscGain);
+    oscGain.connect(dest);
     osc.start(now);
     osc.stop(now + boomDur);
 
-    // 3. Resonant echo body (lowpass rumble)
-    const bodyDur = big ? 0.85 : 0.48;
-    const bodySamples = Math.floor(c.sampleRate * bodyDur);
-    const bodyBuf = c.createBuffer(1, bodySamples, c.sampleRate);
-    const bodyData = bodyBuf.getChannelData(0);
-    for (let i = 0; i < bodySamples; i++) {
-      const decay = Math.pow(1 - i / bodySamples, 1.8);
-      bodyData[i] = (Math.random() * 2 - 1) * decay;
+    // 3. Rolling Sky Reverb / Air Rumble (Brownian filtered noise)
+    const rumbleDur = big ? 0.95 : 0.55;
+    const rumbleSamples = Math.floor(c.sampleRate * rumbleDur);
+    const rumbleBuf = c.createBuffer(1, rumbleSamples, c.sampleRate);
+    const rumbleData = rumbleBuf.getChannelData(0);
+    let lastNoise = 0;
+    for (let i = 0; i < rumbleSamples; i++) {
+      const white = Math.random() * 2 - 1;
+      lastNoise = (lastNoise + (0.04 * white)) / 1.04;
+      const decay = Math.pow(1 - i / rumbleSamples, 2.2);
+      rumbleData[i] = lastNoise * 3.6 * decay;
     }
-    const bodySrc = c.createBufferSource();
-    bodySrc.buffer = bodyBuf;
-    const bodyFilter = c.createBiquadFilter();
-    bodyFilter.type = "lowpass";
-    bodyFilter.frequency.setValueAtTime(rand(700, 1200), now);
-    bodyFilter.frequency.exponentialRampToValueAtTime(180, now + bodyDur);
-    const bodyGain = c.createGain();
-    bodyGain.gain.setValueAtTime(big ? 0.6 : 0.35, now);
-    bodyGain.gain.exponentialRampToValueAtTime(0.001, now + bodyDur);
-    bodySrc.connect(bodyFilter);
-    bodyFilter.connect(bodyGain);
-    bodyGain.connect(c.destination);
-    bodySrc.start(now);
+    const rumbleSrc = c.createBufferSource();
+    rumbleSrc.buffer = rumbleBuf;
 
-    // 4. Sparkling crackles (festive patakha pops)
-    if (big || Math.random() < 0.45) {
-      const popCount = big ? Math.floor(rand(3, 6)) : 2;
+    const rumbleFilter = c.createBiquadFilter();
+    rumbleFilter.type = "lowpass";
+    rumbleFilter.frequency.setValueAtTime(rand(480, 780), now);
+    rumbleFilter.frequency.exponentialRampToValueAtTime(90, now + rumbleDur);
+
+    const rumbleGain = c.createGain();
+    rumbleGain.gain.setValueAtTime(big ? 0.65 : 0.4, now);
+    rumbleGain.gain.exponentialRampToValueAtTime(0.0001, now + rumbleDur);
+
+    rumbleSrc.connect(rumbleFilter);
+    rumbleFilter.connect(rumbleGain);
+    rumbleGain.connect(dest);
+    rumbleSrc.start(now);
+
+    // 4. Trailing Firework Crackle Stars (festive patakha sizzle)
+    if (big || Math.random() < 0.5) {
+      const popCount = big ? Math.floor(rand(3, 7)) : Math.floor(rand(2, 4));
       for (let p = 0; p < popCount; p++) {
-        const popTime = now + 0.04 + rand(0.03, 0.22);
-        const popDur = 0.025;
+        const popTime = now + 0.05 + rand(0.02, 0.28);
+        const popDur = rand(0.015, 0.035);
         const pSamples = Math.floor(c.sampleRate * popDur);
         const pBuf = c.createBuffer(1, pSamples, c.sampleRate);
         const pData = pBuf.getChannelData(0);
-        for (let i = 0; i < pSamples; i++) pData[i] = (Math.random() * 2 - 1) * (1 - i / pSamples);
+        for (let i = 0; i < pSamples; i++) {
+          pData[i] = (Math.random() * 2 - 1) * (1 - i / pSamples);
+        }
         const pSrc = c.createBufferSource();
         pSrc.buffer = pBuf;
+
         const pFilter = c.createBiquadFilter();
         pFilter.type = "highpass";
-        pFilter.frequency.value = rand(2200, 4200);
+        pFilter.frequency.value = rand(1800, 3800);
+
         const pGain = c.createGain();
-        pGain.gain.setValueAtTime(rand(0.12, 0.32), popTime);
-        pGain.gain.exponentialRampToValueAtTime(0.001, popTime + popDur);
+        pGain.gain.setValueAtTime(rand(0.08, 0.24), popTime);
+        pGain.gain.exponentialRampToValueAtTime(0.0001, popTime + popDur);
+
         pSrc.connect(pFilter);
         pFilter.connect(pGain);
-        pGain.connect(c.destination);
+        pGain.connect(dest);
         pSrc.start(popTime);
       }
     }
@@ -202,7 +297,7 @@ class Sound {
         o.type = "sine"; o.frequency.value = f;
         g.gain.setValueAtTime(0.0001, t + i * 0.12); g.gain.exponentialRampToValueAtTime(0.12, t + i * 0.12 + 0.02);
         g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.12 + 0.9);
-        o.connect(g); g.connect(c.destination); o.start(t + i * 0.12); o.stop(t + i * 0.12 + 1);
+        o.connect(g); g.connect(this.outNode); o.start(t + i * 0.12); o.stop(t + i * 0.12 + 1);
       });
     } catch {
       // AudioContext fallback
@@ -278,7 +373,8 @@ class Engine {
   }
 
   private explode(x: number, y: number, shape: Shape, palette: Palette, scale: number): void {
-    this.sound.boom(scale > 1.5);
+    const pan = Math.max(-0.85, Math.min(0.85, (x / Math.max(this.w, 1)) * 2 - 1));
+    this.sound.boom(scale > 1.2, pan);
     const n = Math.round((reduced ? 25 : isMobile ? 45 : 100) * scale);
     const k = Math.sqrt(scale);
     if (shape === "heart") {
@@ -506,8 +602,21 @@ const whisper = $("#whisper");
 whisper.setAttribute("aria-label", whisper.textContent || "");
 whisper.innerHTML = (whisper.textContent || "").split(" ").map((w, i) => `<span style="animation-delay:${0.8 + i * 0.35}s" aria-hidden="true">${w}</span>`).join(" ");
 
+// Autoplay front page divine song as soon as front page is reached / first user gesture
+const autoPlayFront = () => {
+  if (!started && sound.currentMode === "front") {
+    sound.playFrontMusic();
+  }
+};
+sound.playFrontMusic();
+["pointerdown", "touchstart", "keydown", "wheel", "click"].forEach((evt) => {
+  window.addEventListener(evt, autoPlayFront, { once: true, passive: true });
+});
+
 $("#start").addEventListener("click", () => {
-  sound.unlock(); started = true;
+  sound.setMode("celebration");
+  sound.unlock();
+  started = true;
   burstSky(); pulseWash();
   intro.classList.add("gone");
   main.hidden = false;
@@ -621,6 +730,7 @@ if (respForm) {
 
 $("#replay").addEventListener("click", () => {
   closeSurprise(); buildDiyas();
+  sound.setMode("front");
   $("#diya-msg").textContent = "Two diyas are glowing. Light the rest.";
   main.classList.remove("show"); main.hidden = true;
   intro.classList.remove("gone");
@@ -632,10 +742,17 @@ $("#replay").addEventListener("click", () => {
 /* sound toggle */
 const soundBtn = $("#sound");
 soundBtn.addEventListener("click", () => {
-  sound.on = !sound.on;
-  soundBtn.textContent = sound.on ? "🔊" : "🔇";
-  soundBtn.setAttribute("aria-pressed", String(sound.on));
-  if (sound.on) sound.unlock();
+  const enabled = sound.toggle();
+  soundBtn.textContent = enabled ? "🔊" : "🔇";
+  soundBtn.setAttribute("aria-pressed", String(enabled));
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    sound.pauseMusic();
+  } else if (sound.on) {
+    sound.playCurrentMusic();
+  }
 });
 
 /* init */
