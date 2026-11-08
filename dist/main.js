@@ -8,16 +8,16 @@ const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const isMobile = innerWidth < 700;
 /* ---- Remove 300ms tap delay on all touch devices ---- */
 if ('addEventListener' in document) {
-    document.addEventListener('touchstart', function(){}, {passive: true});
+    document.addEventListener('touchstart', () => { }, { passive: true });
 }
-const GOLD = ["#FFD700", "#FFE98A", "#FFB400"];
+const GOLD = ["#D4AF37", "#FFF3D6", "#FF9933"];
 const PALETTES = [
     GOLD,
-    ["#FF3131", "#FF8C00", "#FFD700"],
-    ["#FF8C00", "#FFD700", "#FFF4DC"],
-    ["#B66DFF", "#7A3CFF", "#FFF4DC"],
-    ["#4DA3FF", "#3DE0FF", "#FFF4DC"],
-    ["#FF4FA3", "#FF3131", "#FFD700"],
+    ["#FF9933", "#D4AF37", "#FFF3D6"],
+    ["#D4AF37", "#FFB366", "#650D1B"],
+    ["#FF8000", "#D4AF37", "#FFF3D6"],
+    ["#D4AF37", "#FFE699", "#9E7D19"],
+    ["#FF9933", "#FF5722", "#D4AF37"],
 ];
 /* ---------- Sound (synthesised, starts only after a user gesture) ---------- */
 class Sound {
@@ -149,7 +149,6 @@ class Engine {
         this.rockets = [];
         this.fountains = [];
         this.last = performance.now();
-        /* Reduced particle caps: 500 mobile / 1500 desktop to prevent frame drops */
         this.cap = isMobile ? 500 : 1500;
         this.loop = (t) => {
             const dt = Math.min((t - this.last) / 16.667, 3);
@@ -204,7 +203,7 @@ class Engine {
         };
         this.ctx = canvas.getContext("2d");
         this.resize();
-        addEventListener("resize", () => this.resize());
+        addEventListener("resize", () => this.resize(), { passive: true });
         requestAnimationFrame(this.loop);
     }
     get width() { return this.w; }
@@ -309,7 +308,7 @@ function buildLights() {
 function buildPetals() {
     if (reduced)
         return;
-    const box = $("#petals"), cols = ["#FF8C00", "#FFB400", "#FF4FA3", "#FF6A3D"];
+    const box = $("#petals"), cols = ["#FF9933", "#FF8000", "#D4AF37", "#FFB366"];
     for (let i = 0; i < (isMobile ? 10 : 18); i++) {
         const p = document.createElement("i");
         p.className = "petal";
@@ -318,7 +317,7 @@ function buildPetals() {
     }
 }
 function buildRangoli() {
-    const cols = ["#FF3131", "#FF8C00", "#FFD700", "#B66DFF", "#FF4FA3", "#4DA3FF"];
+    const cols = ["#D4AF37", "#FF9933", "#FFF3D6", "#9E7D19", "#FFB366", "#D4AF37"];
     const rings = [{ r: 88, n: 24, w: 5, l: 10 }, { r: 70, n: 18, w: 7, l: 16 }, { r: 48, n: 12, w: 9, l: 20 }, { r: 26, n: 8, w: 8, l: 14 }];
     let s = `<svg viewBox="-100 -100 200 200" fill="none">`;
     rings.forEach((g, ri) => {
@@ -493,39 +492,37 @@ $("#surprise-btn").addEventListener("click", () => void openSurprise());
 $("#close-surprise").addEventListener("click", closeSurprise);
 addEventListener("keydown", (e) => { if (e.key === "Escape" && surpriseOpen)
     closeSurprise(); });
-/* sharing */
-const WISH = "🪔 Happy Diwali 2026! 🪔\n\nMay the lights of Diwali illuminate your life with happiness, prosperity, success, and endless beautiful memories.\n\n" +
-    "Wishing you and your family a very Happy and Prosperous Diwali!\n\nWith love,\nDeepak Yadav ❤️";
-const pageUrl = location.protocol.startsWith("http") ? location.href : "";
-const fullWish = pageUrl ? `${WISH}\n\n${pageUrl}` : WISH;
-async function copyWish() {
-    try {
-        await navigator.clipboard.writeText(fullWish);
-        return true;
-    }
-    catch {
-        const t = document.createElement("textarea");
-        t.value = fullWish;
-        t.style.cssText = "position:fixed;opacity:0";
-        document.body.appendChild(t);
-        t.select();
-        const ok = document.execCommand("copy");
-        t.remove();
-        return ok;
-    }
-}
-$("#wa").addEventListener("click", () => window.open("https://wa.me/?text=" + encodeURIComponent(fullWish), "_blank", "noopener"));
-$("#copy").addEventListener("click", async () => toast((await copyWish()) ? "Diwali wishes copied 🪔" : "Could not copy. Please copy manually."));
-$("#native").addEventListener("click", async () => {
-    if (navigator.share) {
-        try {
-            await navigator.share({ title: "Happy Diwali 2026", text: WISH, ...(pageUrl ? { url: pageUrl } : {}) });
+/* response email form */
+const respForm = document.querySelector("#response-form");
+if (respForm) {
+    respForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        sound.unlock();
+        const nameInput = document.querySelector("#resp-name");
+        const emailInput = document.querySelector("#resp-email");
+        const msgInput = document.querySelector("#resp-msg");
+        const name = nameInput ? nameInput.value.trim() : "";
+        const email = emailInput ? emailInput.value.trim() : "";
+        const msg = msgInput ? msgInput.value.trim() : "";
+        if (!name || !msg)
+            return;
+        const recipient = "dy036064@gmail.com";
+        const subject = encodeURIComponent(`Diwali Wishes & Response from ${name}`);
+        const body = encodeURIComponent(`Dear Deepak,\n\n${msg}\n\nFrom: ${name}\nEmail: ${email || "Not specified"}\n\n(Sent via Happy Diwali Celebration 2026)`);
+        // Launch email client
+        window.location.href = `mailto:${recipient}?subject=${subject}&body=${body}`;
+        // Celebration feedback
+        burstSky();
+        pulseWash();
+        sound.chime();
+        toast(`Thank you ${name}! Your Diwali message is being sent 💌`);
+        const statusEl = document.querySelector("#response-status");
+        if (statusEl) {
+            statusEl.textContent = `धन्यवाद ${name}! आपकी शुभकामनाएँ भेजी जा रही हैं ✨`;
         }
-        catch { /* cancelled */ }
-    }
-    else
-        toast((await copyWish()) ? "Sharing isn't supported here, so the wishes were copied." : "Sharing isn't supported on this browser.");
-});
+        respForm.reset();
+    });
+}
 $("#replay").addEventListener("click", () => {
     closeSurprise();
     buildDiyas();

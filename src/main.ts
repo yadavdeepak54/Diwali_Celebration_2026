@@ -14,20 +14,29 @@ if ('addEventListener' in document) {
 
 type Palette = string[];
 type Shape = "circle" | "ring" | "heart" | "willow" | "fountain";
-const GOLD: Palette = ["#FFD700", "#FFE98A", "#FFB400"];
+const GOLD: Palette = ["#D4AF37", "#FFF3D6", "#FF9933"];
 const PALETTES: Palette[] = [
   GOLD,
-  ["#FF3131", "#FF8C00", "#FFD700"],
-  ["#FF8C00", "#FFD700", "#FFF4DC"],
-  ["#B66DFF", "#7A3CFF", "#FFF4DC"],
-  ["#4DA3FF", "#3DE0FF", "#FFF4DC"],
-  ["#FF4FA3", "#FF3131", "#FFD700"],
+  ["#FF9933", "#D4AF37", "#FFF3D6"],
+  ["#D4AF37", "#FFB366", "#650D1B"],
+  ["#FF8000", "#D4AF37", "#FFF3D6"],
+  ["#D4AF37", "#FFE699", "#9E7D19"],
+  ["#FF9933", "#FF5722", "#D4AF37"],
 ];
 
-/* ---------- Sound (synthesised, starts only after a user gesture) ---------- */
+/* ---------- Sound (Ambient Festive Music & Realistic Cracker Bursts) ---------- */
 class Sound {
   on = true;
   private ctx: AudioContext | null = null;
+  private bgMusic: HTMLAudioElement | null = null;
+
+  constructor() {
+    this.bgMusic = document.querySelector<HTMLAudioElement>("#bg-music");
+    if (this.bgMusic) {
+      this.bgMusic.volume = 0.45;
+    }
+  }
+
   private get c(): AudioContext {
     if (!this.ctx) {
       const A = window.AudioContext || (window as any).webkitAudioContext;
@@ -35,35 +44,169 @@ class Sound {
     }
     return this.ctx!;
   }
-  unlock(): void { if (this.on) void this.c.resume(); }
-  private noise(dur: number, freq: number, gain: number): void {
-    const c = this.c, n = Math.floor(c.sampleRate * dur);
-    const buf = c.createBuffer(1, n, c.sampleRate), d = buf.getChannelData(0);
-    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);
-    const s = c.createBufferSource(); s.buffer = buf;
-    const f = c.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = freq;
-    const g = c.createGain(); g.gain.value = gain;
-    s.connect(f); f.connect(g); g.connect(c.destination); s.start();
+
+  unlock(): void {
+    if (!this.on) return;
+    if (this.ctx && this.ctx.state === "suspended") {
+      void this.ctx.resume();
+    }
+    this.playMusic();
   }
-  boom(big = false): void { if (this.on && this.ctx) this.noise(big ? 1.2 : 0.6, rand(500, 1400), big ? 0.7 : 0.35); }
+
+  playMusic(): void {
+    if (!this.on || !this.bgMusic) return;
+    if (this.bgMusic.paused) {
+      const p = this.bgMusic.play();
+      if (p !== undefined) {
+        p.catch(() => {
+          // Playback will resume after direct user gesture
+        });
+      }
+    }
+  }
+
+  pauseMusic(): void {
+    if (this.bgMusic && !this.bgMusic.paused) {
+      this.bgMusic.pause();
+    }
+  }
+
+  toggle(): boolean {
+    this.on = !this.on;
+    if (this.on) {
+      this.unlock();
+    } else {
+      this.pauseMusic();
+      if (this.ctx && this.ctx.state === "running") {
+        void this.ctx.suspend();
+      }
+    }
+    return this.on;
+  }
+
+  // Realistic firecracker burst: ONLY triggered when cracker bursts on screen
+  boom(big = false): void {
+    if (!this.on) return;
+    try {
+      const c = this.c;
+      if (c.state === "suspended") void c.resume();
+      this.synthesizeCracker(big);
+    } catch {
+      // Fallback if audio graph fails
+    }
+  }
+
+  private synthesizeCracker(big: boolean): void {
+    const c = this.c;
+    const now = c.currentTime;
+
+    // 1. Sharp initial crack / snap (the impact of firecracker explosion)
+    const snapDur = big ? 0.08 : 0.045;
+    const snapSamples = Math.floor(c.sampleRate * snapDur);
+    const snapBuf = c.createBuffer(1, snapSamples, c.sampleRate);
+    const snapData = snapBuf.getChannelData(0);
+    for (let i = 0; i < snapSamples; i++) {
+      const env = Math.exp(-i / (snapSamples * 0.2));
+      snapData[i] = (Math.random() * 2 - 1) * env;
+    }
+    const snapSrc = c.createBufferSource();
+    snapSrc.buffer = snapBuf;
+    const snapFilter = c.createBiquadFilter();
+    snapFilter.type = "bandpass";
+    snapFilter.frequency.value = rand(1900, 3200);
+    snapFilter.Q.value = 1.1;
+    const snapGain = c.createGain();
+    snapGain.gain.setValueAtTime(big ? 0.85 : 0.55, now);
+    snapGain.gain.exponentialRampToValueAtTime(0.001, now + snapDur);
+    snapSrc.connect(snapFilter);
+    snapFilter.connect(snapGain);
+    snapGain.connect(c.destination);
+    snapSrc.start(now);
+
+    // 2. Deep low-frequency thump / bass punch
+    const osc = c.createOscillator();
+    const oscGain = c.createGain();
+    const startFreq = rand(110, 160);
+    const endFreq = rand(28, 42);
+    const boomDur = big ? 0.55 : 0.35;
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(startFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(endFreq, now + boomDur);
+    oscGain.gain.setValueAtTime(big ? 0.55 : 0.32, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + boomDur);
+    osc.connect(oscGain);
+    oscGain.connect(c.destination);
+    osc.start(now);
+    osc.stop(now + boomDur);
+
+    // 3. Resonant echo body (lowpass rumble)
+    const bodyDur = big ? 0.85 : 0.48;
+    const bodySamples = Math.floor(c.sampleRate * bodyDur);
+    const bodyBuf = c.createBuffer(1, bodySamples, c.sampleRate);
+    const bodyData = bodyBuf.getChannelData(0);
+    for (let i = 0; i < bodySamples; i++) {
+      const decay = Math.pow(1 - i / bodySamples, 1.8);
+      bodyData[i] = (Math.random() * 2 - 1) * decay;
+    }
+    const bodySrc = c.createBufferSource();
+    bodySrc.buffer = bodyBuf;
+    const bodyFilter = c.createBiquadFilter();
+    bodyFilter.type = "lowpass";
+    bodyFilter.frequency.setValueAtTime(rand(700, 1200), now);
+    bodyFilter.frequency.exponentialRampToValueAtTime(180, now + bodyDur);
+    const bodyGain = c.createGain();
+    bodyGain.gain.setValueAtTime(big ? 0.6 : 0.35, now);
+    bodyGain.gain.exponentialRampToValueAtTime(0.001, now + bodyDur);
+    bodySrc.connect(bodyFilter);
+    bodyFilter.connect(bodyGain);
+    bodyGain.connect(c.destination);
+    bodySrc.start(now);
+
+    // 4. Sparkling crackles (festive patakha pops)
+    if (big || Math.random() < 0.45) {
+      const popCount = big ? Math.floor(rand(3, 6)) : 2;
+      for (let p = 0; p < popCount; p++) {
+        const popTime = now + 0.04 + rand(0.03, 0.22);
+        const popDur = 0.025;
+        const pSamples = Math.floor(c.sampleRate * popDur);
+        const pBuf = c.createBuffer(1, pSamples, c.sampleRate);
+        const pData = pBuf.getChannelData(0);
+        for (let i = 0; i < pSamples; i++) pData[i] = (Math.random() * 2 - 1) * (1 - i / pSamples);
+        const pSrc = c.createBufferSource();
+        pSrc.buffer = pBuf;
+        const pFilter = c.createBiquadFilter();
+        pFilter.type = "highpass";
+        pFilter.frequency.value = rand(2200, 4200);
+        const pGain = c.createGain();
+        pGain.gain.setValueAtTime(rand(0.12, 0.32), popTime);
+        pGain.gain.exponentialRampToValueAtTime(0.001, popTime + popDur);
+        pSrc.connect(pFilter);
+        pFilter.connect(pGain);
+        pGain.connect(c.destination);
+        pSrc.start(popTime);
+      }
+    }
+  }
+
+  // Silent rocket launch: Cracker sounds ONLY occur when bursting on screen!
   launch(): void {
-    if (!this.on || !this.ctx) return;
-    const c = this.c, o = c.createOscillator(), g = c.createGain(), t = c.currentTime;
-    o.type = "sawtooth";
-    o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(900, t + 0.6);
-    g.gain.setValueAtTime(0.04, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
-    o.connect(g); g.connect(c.destination); o.start(); o.stop(t + 0.6);
+    // Intentionally silent
   }
+
   chime(): void {
-    if (!this.on || !this.ctx) return;
-    const c = this.c, t = c.currentTime;
-    [880, 1318].forEach((f, i) => {
-      const o = c.createOscillator(), g = c.createGain();
-      o.type = "sine"; o.frequency.value = f;
-      g.gain.setValueAtTime(0.0001, t + i * 0.12); g.gain.exponentialRampToValueAtTime(0.12, t + i * 0.12 + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.12 + 0.9);
-      o.connect(g); g.connect(c.destination); o.start(t + i * 0.12); o.stop(t + i * 0.12 + 1);
-    });
+    if (!this.on) return;
+    try {
+      const c = this.c, t = c.currentTime;
+      [880, 1318].forEach((f, i) => {
+        const o = c.createOscillator(), g = c.createGain();
+        o.type = "sine"; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t + i * 0.12); g.gain.exponentialRampToValueAtTime(0.12, t + i * 0.12 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.12 + 0.9);
+        o.connect(g); g.connect(c.destination); o.start(t + i * 0.12); o.stop(t + i * 0.12 + 1);
+      });
+    } catch {
+      // AudioContext fallback
+    }
   }
 }
 
@@ -130,7 +273,6 @@ class Engine {
   private add(p: Particle): void { if (this.parts.length < this.cap) this.parts.push(p); }
 
   launch(x: number, ty: number, shape: Shape = "circle", palette: Palette = pick(PALETTES), scale = 1, sx = x + rand(-80, 80)): void {
-    this.sound.launch();
     if (shape === "fountain") { this.fountains.push({ x, ttl: 150, color: pick(palette) }); return; }
     this.rockets.push(new Rocket(sx, this.h, x, ty, shape, palette, scale));
   }
@@ -262,7 +404,7 @@ function buildLights(): void {
 
 function buildPetals(): void {
   if (reduced) return;
-  const box = $("#petals"), cols = ["#FF8C00", "#FFB400", "#FF4FA3", "#FF6A3D"];
+  const box = $("#petals"), cols = ["#FF9933", "#FF8000", "#D4AF37", "#FFB366"];
   for (let i = 0; i < (isMobile ? 10 : 18); i++) {
     const p = document.createElement("i");
     p.className = "petal";
@@ -272,7 +414,7 @@ function buildPetals(): void {
 }
 
 function buildRangoli(): void {
-  const cols = ["#FF3131", "#FF8C00", "#FFD700", "#B66DFF", "#FF4FA3", "#4DA3FF"];
+  const cols = ["#D4AF37", "#FF9933", "#FFF3D6", "#9E7D19", "#FFB366", "#D4AF37"];
   const rings = [{ r: 88, n: 24, w: 5, l: 10 }, { r: 70, n: 18, w: 7, l: 16 }, { r: 48, n: 12, w: 9, l: 20 }, { r: 26, n: 8, w: 8, l: 14 }];
   let s = `<svg viewBox="-100 -100 200 200" fill="none">`;
   rings.forEach((g, ri) => {
@@ -437,28 +579,46 @@ $("#surprise-btn").addEventListener("click", () => void openSurprise());
 $("#close-surprise").addEventListener("click", closeSurprise);
 addEventListener("keydown", (e) => { if (e.key === "Escape" && surpriseOpen) closeSurprise(); });
 
-/* sharing */
-const WISH =
-  "🪔 Happy Diwali 2026! 🪔\n\nMay the lights of Diwali illuminate your life with happiness, prosperity, success, and endless beautiful memories.\n\n" +
-  "Wishing you and your family a very Happy and Prosperous Diwali!\n\nWith love,\nDeepak Yadav ❤️";
-const pageUrl = location.protocol.startsWith("http") ? location.href : "";
-const fullWish = pageUrl ? `${WISH}\n\n${pageUrl}` : WISH;
+/* response email form */
+const respForm = document.querySelector<HTMLFormElement>("#response-form");
+if (respForm) {
+  respForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    sound.unlock();
+    const nameInput = document.querySelector<HTMLInputElement>("#resp-name");
+    const emailInput = document.querySelector<HTMLInputElement>("#resp-email");
+    const msgInput = document.querySelector<HTMLTextAreaElement>("#resp-msg");
 
-async function copyWish(): Promise<boolean> {
-  try { await navigator.clipboard.writeText(fullWish); return true; }
-  catch {
-    const t = document.createElement("textarea");
-    t.value = fullWish; t.style.cssText = "position:fixed;opacity:0"; document.body.appendChild(t); t.select();
-    const ok = document.execCommand("copy"); t.remove(); return ok;
-  }
+    const name = nameInput ? nameInput.value.trim() : "";
+    const email = emailInput ? emailInput.value.trim() : "";
+    const msg = msgInput ? msgInput.value.trim() : "";
+
+    if (!name || !msg) return;
+
+    const recipient = "dy036064@gmail.com";
+    const subject = encodeURIComponent(`Diwali Wishes & Response from ${name}`);
+    const body = encodeURIComponent(
+      `Dear Deepak,\n\n${msg}\n\nFrom: ${name}\nEmail: ${email || "Not specified"}\n\n(Sent via Happy Diwali Celebration 2026)`
+    );
+
+    // Launch email client
+    window.location.href = `mailto:${recipient}?subject=${subject}&body=${body}`;
+
+    // Celebration feedback
+    burstSky();
+    pulseWash();
+    sound.chime();
+    toast(`Thank you ${name}! Your Diwali message is being sent 💌`);
+
+    const statusEl = document.querySelector<HTMLElement>("#response-status");
+    if (statusEl) {
+      statusEl.textContent = `धन्यवाद ${name}! आपकी शुभकामनाएँ भेजी जा रही हैं ✨`;
+    }
+
+    respForm.reset();
+  });
 }
-$("#wa").addEventListener("click", () => window.open("https://wa.me/?text=" + encodeURIComponent(fullWish), "_blank", "noopener"));
-$("#copy").addEventListener("click", async () => toast((await copyWish()) ? "Diwali wishes copied 🪔" : "Could not copy. Please copy manually."));
-$("#native").addEventListener("click", async () => {
-  if (navigator.share) {
-    try { await navigator.share({ title: "Happy Diwali 2026", text: WISH, ...(pageUrl ? { url: pageUrl } : {}) }); } catch { /* cancelled */ }
-  } else toast((await copyWish()) ? "Sharing isn't supported here, so the wishes were copied." : "Sharing isn't supported on this browser.");
-});
+
 $("#replay").addEventListener("click", () => {
   closeSurprise(); buildDiyas();
   $("#diya-msg").textContent = "Two diyas are glowing. Light the rest.";
