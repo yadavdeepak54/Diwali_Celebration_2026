@@ -32,7 +32,15 @@ class Sound {
         this.frontMusic = document.querySelector("#front-music");
         this.bgMusic = document.querySelector("#bg-music");
         if (this.frontMusic) {
-            this.frontMusic.volume = 0.48; // Clear, divine Ganesh & Lakshmi blessing chant for front page
+            this.frontMusic.volume = 0.55; // Clear, divine Ganesh & Lakshmi blessing chant for front page
+            this.frontMusic.loop = true;
+            // Ensure front music repeats continuously until user enters the celebration
+            this.frontMusic.addEventListener("ended", () => {
+                if (this.currentMode === "front" && this.on && !started) {
+                    this.frontMusic.currentTime = 0;
+                    void this.frontMusic.play().catch(() => { });
+                }
+            });
         }
         if (this.bgMusic) {
             this.bgMusic.volume = 0.35; // Ideal clear, serene background volume for sitar, flute & tabla
@@ -109,6 +117,12 @@ class Sound {
             this.frontMusic.pause();
         if (this.bgMusic && !this.bgMusic.paused)
             this.bgMusic.pause();
+    }
+    stopFrontMusic() {
+        if (this.frontMusic) {
+            this.frontMusic.pause();
+            this.frontMusic.currentTime = 0;
+        }
     }
     toggle() {
         this.on = !this.on;
@@ -605,17 +619,32 @@ function autoShow() {
 const whisper = $("#whisper");
 whisper.setAttribute("aria-label", whisper.textContent || "");
 whisper.innerHTML = (whisper.textContent || "").split(" ").map((w, i) => `<span style="animation-delay:${0.8 + i * 0.35}s" aria-hidden="true">${w}</span>`).join(" ");
-// Autoplay front page divine song as soon as front page is reached / first user gesture
+// Autoplay front page divine song as soon as front page is reached / any user gesture
+const frontAudioTip = document.querySelector("#front-audio-tip");
+if (sound.frontMusic) {
+    sound.frontMusic.addEventListener("play", () => {
+        if (frontAudioTip) {
+            frontAudioTip.innerHTML = `🎶 <i>Divine Bhajan Playing...</i> Tap below to celebrate! 🪔`;
+            frontAudioTip.classList.add("playing");
+        }
+    });
+}
 const autoPlayFront = () => {
     if (!started && sound.currentMode === "front") {
         sound.playFrontMusic();
     }
 };
+// Immediate autoplay attempt on load
 sound.playFrontMusic();
-["pointerdown", "touchstart", "keydown", "wheel", "click"].forEach((evt) => {
-    window.addEventListener(evt, autoPlayFront, { once: true, passive: true });
+// Persistent listeners across window, document, and intro section
+["pointerdown", "touchstart", "touchend", "mousedown", "keydown", "wheel", "scroll", "click"].forEach((evt) => {
+    window.addEventListener(evt, autoPlayFront, { passive: true });
 });
+// Also trigger specifically on tapping anywhere on the intro section (including the Lakshmi-Ganesh picture)
+$("#intro").addEventListener("pointerdown", autoPlayFront, { passive: true });
+$("#intro").addEventListener("click", autoPlayFront, { passive: true });
 $("#start").addEventListener("click", () => {
+    sound.stopFrontMusic(); // Stop front page song when proceeding to celebration
     sound.setMode("celebration");
     sound.unlock();
     started = true;
@@ -748,6 +777,7 @@ $("#replay").addEventListener("click", () => {
     document.body.classList.add("locked");
     scrollTo(0, 0);
     started = false;
+    sound.playFrontMusic();
     setTimeout(() => { burstSky(); pulseWash(); }, 300);
 });
 /* sound toggle */

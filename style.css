@@ -559,6 +559,22 @@ a {
   animation: whisper .9s ease-out forwards, breathe 3s ease-in-out 4s infinite;
 }
 
+.front-audio-tip {
+  font-size: clamp(.8rem, 2vw, .92rem);
+  color: var(--gold-light);
+  opacity: 0.88;
+  letter-spacing: .03em;
+  font-family: var(--body);
+  margin-top: .1rem;
+  transition: opacity .4s ease, color .4s ease;
+  animation: breathe 3s ease-in-out infinite;
+}
+
+.front-audio-tip.playing {
+  color: var(--gold);
+  opacity: 0.95;
+}
+
 /* =============================================
    HERO SECTION (MAIN CELEBRATION)
    ============================================= */
