@@ -617,34 +617,51 @@ const whisper = $("#whisper");
 whisper.setAttribute("aria-label", whisper.textContent || "");
 whisper.innerHTML = (whisper.textContent || "").split(" ").map((w, i) => `<span style="animation-delay:${0.8 + i * 0.35}s" aria-hidden="true">${w}</span>`).join(" ");
 
-// Autoplay front page divine song as soon as front page is reached / any user gesture
+// Autoplay front page divine song as soon as front page is reached / any user gesture on mobile or desktop
 const frontAudioTip = document.querySelector<HTMLElement>("#front-audio-tip");
-if (sound.frontMusic) {
-  sound.frontMusic.addEventListener("play", () => {
-    if (frontAudioTip) {
-      frontAudioTip.innerHTML = `🎶 <i>Divine Bhajan Playing...</i> Tap below to celebrate! 🪔`;
-      frontAudioTip.classList.add("playing");
-    }
-  });
-}
-
-const autoPlayFront = () => {
-  if (!started && sound.currentMode === "front") {
-    sound.playFrontMusic();
+const setTipPlaying = () => {
+  if (frontAudioTip) {
+    frontAudioTip.innerHTML = `<span class="audio-pulse">🎶</span> <span id="front-tip-text">Divine Song Playing... Tap Below to Celebrate</span> <span class="audio-note">🪔</span>`;
+    frontAudioTip.classList.add("playing");
   }
 };
 
-// Immediate autoplay attempt on load
+if (sound.frontMusic) {
+  sound.frontMusic.addEventListener("play", setTipPlaying);
+  sound.frontMusic.addEventListener("playing", setTipPlaying);
+}
+
+const handleUserActivation = () => {
+  if (started) return;
+  sound.unlock();
+  sound.playFrontMusic();
+};
+
+// Immediate attempt on load (works on desktop / allowed browsers)
 sound.playFrontMusic();
 
-// Persistent listeners across window, document, and intro section
-["pointerdown", "touchstart", "touchend", "mousedown", "keydown", "wheel", "scroll", "click"].forEach((evt) => {
-  window.addEventListener(evt, autoPlayFront, { passive: true });
-});
+// Direct synchronous listeners on mobile touch and desktop click
+window.addEventListener("touchstart", handleUserActivation, { passive: true });
+window.addEventListener("touchend", handleUserActivation, { passive: true });
+window.addEventListener("click", handleUserActivation, { passive: true });
+window.addEventListener("pointerdown", handleUserActivation, { passive: true });
+document.addEventListener("touchstart", handleUserActivation, { passive: true });
+document.addEventListener("click", handleUserActivation, { passive: true });
 
-// Also trigger specifically on tapping anywhere on the intro section (including the Lakshmi-Ganesh picture)
-$("#intro").addEventListener("pointerdown", autoPlayFront, { passive: true });
-$("#intro").addEventListener("click", autoPlayFront, { passive: true });
+const introEl = $("#intro");
+introEl.addEventListener("touchstart", handleUserActivation, { passive: true });
+introEl.addEventListener("click", handleUserActivation, { passive: true });
+
+if (frontAudioTip) {
+  frontAudioTip.addEventListener("touchstart", (e) => {
+    e.stopPropagation();
+    handleUserActivation();
+  }, { passive: true });
+  frontAudioTip.addEventListener("click", (e) => {
+    e.stopPropagation();
+    handleUserActivation();
+  });
+}
 
 $("#start").addEventListener("click", () => {
   sound.stopFrontMusic(); // Stop front page song when proceeding to celebration

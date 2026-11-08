@@ -560,19 +560,44 @@ a {
 }
 
 .front-audio-tip {
-  font-size: clamp(.8rem, 2vw, .92rem);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  padding: .5em 1.2em;
+  border-radius: 999px;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  background: rgba(59, 7, 21, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: clamp(.8rem, 2.2vw, .92rem);
   color: var(--gold-light);
-  opacity: 0.88;
   letter-spacing: .03em;
   font-family: var(--body);
-  margin-top: .1rem;
-  transition: opacity .4s ease, color .4s ease;
+  margin-top: .2rem;
+  min-height: 42px;
+  cursor: pointer;
+  transition: all .25s ease;
   animation: breathe 3s ease-in-out infinite;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), 0 0 16px rgba(212, 175, 55, 0.15);
+  touch-action: manipulation;
+}
+
+.front-audio-tip:hover, .front-audio-tip:active {
+  background: rgba(101, 13, 27, 0.85);
+  border-color: var(--gold);
+  color: #FFF;
+  transform: scale(1.02);
 }
 
 .front-audio-tip.playing {
+  border-color: rgba(212, 175, 55, 0.75);
+  background: rgba(32, 3, 10, 0.88);
   color: var(--gold);
-  opacity: 0.95;
+}
+
+.front-audio-tip .audio-pulse {
+  animation: blink 1.6s infinite ease-in-out;
 }
 
 /* =============================================
@@ -1305,7 +1330,46 @@ a {
 /* Standard mobile (< 640px) */
 @media (max-width: 640px) {
   #intro {
-    padding-top: clamp(6.2rem, 14vh, 8.5rem);
+    padding-top: clamp(3.2rem, 7vh, 4.6rem);
+    padding-bottom: clamp(1.2rem, 3vh, 2rem);
+    gap: clamp(.4rem, 1.2vh, .8rem);
+    -webkit-overflow-scrolling: touch;
+  }
+  .intro-title {
+    font-size: clamp(1.2rem, 5.5vw, 1.85rem);
+    line-height: 1.32;
+    padding: 0.15em 0.05em;
+  }
+  .intro-god-wrap {
+    width: clamp(200px, 66vw, 320px);
+    aspect-ratio: 10/7;
+  }
+  .front-audio-tip {
+    width: min(320px, 92vw);
+    font-size: 0.82rem;
+    padding: .45em .9em;
+  }
+  #whisper {
+    font-size: clamp(.88rem, 3.2vw, 1.05rem);
+    min-height: auto;
+  }
+  #start {
+    width: min(290px, 88vw);
+    min-height: 48px;
+    font-size: clamp(.88rem, 3.2vw, 1rem);
+  }
+  .hero {
+    padding-top: clamp(4.5rem, 10vh, 6.5rem);
+  }
+  .blessing-card {
+    padding: 1.2rem 1rem;
+  }
+  .response-box {
+    padding: 1.4rem 1.1rem;
+    width: calc(100vw - 2 * var(--pad-x));
+  }
+  .resp-input, .resp-textarea {
+    font-size: 16px; /* Prevents auto-zoom on iOS Safari */
   }
   .hindi {
     line-height: 1.36;

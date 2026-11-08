@@ -43,8 +43,8 @@
 </div>
 <div id="petals" aria-hidden="true"></div>
 
-<audio id="front-music" src="assets/front-page-song.mp3" preload="auto" autoplay loop playsinline></audio>
-<audio id="bg-music" src="assets/shubh-deepawali.mp3" preload="auto" loop playsinline></audio>
+<audio id="front-music" src="assets/front-page-song.mp3" preload="auto" autoplay loop playsinline webkit-playsinline="true"></audio>
+<audio id="bg-music" src="assets/shubh-deepawali.mp3" preload="auto" loop playsinline webkit-playsinline="true"></audio>
 <button id="sound" class="icon-btn" aria-pressed="true" aria-label="Sound on or off">🔊</button>
 
 <section id="intro">
@@ -61,7 +61,9 @@
   </div>
   <p id="whisper">Someone has a special Diwali wish for you...</p>
   <button id="start" class="gold-btn">LET'S CELEBRATE 🪔</button>
-  <p id="front-audio-tip" class="front-audio-tip">🪔 Tap anywhere to listen to the divine bhajan ✨</p>
+  <button id="front-audio-tip" class="front-audio-tip" type="button" aria-label="Play Divine Bhajan">
+    <span class="audio-pulse">🪔</span> <span id="front-tip-text">Tap anywhere to play Divine Song</span> <span class="audio-note">🎵</span>
+  </button>
 </section>
 
 <main id="main" hidden>
