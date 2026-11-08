@@ -6,6 +6,10 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const isMobile = innerWidth < 700;
+/* ---- Remove 300ms tap delay on all touch devices ---- */
+if ('addEventListener' in document) {
+    document.addEventListener('touchstart', function(){}, {passive: true});
+}
 const GOLD = ["#FFD700", "#FFE98A", "#FFB400"];
 const PALETTES = [
     GOLD,
@@ -145,7 +149,8 @@ class Engine {
         this.rockets = [];
         this.fountains = [];
         this.last = performance.now();
-        this.cap = isMobile ? 900 : 2000;
+        /* Reduced particle caps: 500 mobile / 1500 desktop to prevent frame drops */
+        this.cap = isMobile ? 500 : 1500;
         this.loop = (t) => {
             const dt = Math.min((t - this.last) / 16.667, 3);
             this.last = t;
@@ -224,7 +229,7 @@ class Engine {
     }
     explode(x, y, shape, palette, scale) {
         this.sound.boom(scale > 1.5);
-        const n = Math.round((reduced ? 40 : isMobile ? 70 : 130) * scale);
+        const n = Math.round((reduced ? 25 : isMobile ? 45 : 100) * scale);
         const k = Math.sqrt(scale);
         if (shape === "heart") {
             const m = Math.round(n * 1.2);
@@ -416,7 +421,7 @@ document.addEventListener("pointerdown", (e) => {
         return;
     sound.unlock();
     skyClick(e.clientX, e.clientY);
-});
+}, { passive: true });
 $("#burst").addEventListener("click", () => { sound.unlock(); burstSky(); });
 /* diyas */
 let msgIdx = 0;
@@ -549,7 +554,10 @@ buildPetals();
 buildRangoli();
 buildDiyas();
 let rz;
-addEventListener("resize", () => { clearTimeout(rz); rz = window.setTimeout(buildLights, 200); });
+addEventListener("resize", () => {
+    clearTimeout(rz);
+    rz = window.setTimeout(buildLights, 200);
+}, { passive: true });
 setTimeout(() => engine.launch(engine.width * 0.5, engine.height * 0.3, "circle"), 600);
 setTimeout(autoShow, 1400);
 void started;

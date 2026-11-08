@@ -7,6 +7,11 @@ const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms)
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const isMobile = innerWidth < 700;
 
+/* ---- Remove 300ms tap delay on all touch devices ---- */
+if ('addEventListener' in document) {
+  document.addEventListener('touchstart', () => {}, { passive: true });
+}
+
 type Palette = string[];
 type Shape = "circle" | "ring" | "heart" | "willow" | "fountain";
 const GOLD: Palette = ["#FFD700", "#FFE98A", "#FFB400"];
@@ -105,12 +110,12 @@ class Engine {
   private rockets: Rocket[] = [];
   private fountains: { x: number; ttl: number; color: string }[] = [];
   private last = performance.now();
-  private cap = isMobile ? 900 : 2000;
+  private cap = isMobile ? 500 : 1500;
 
   constructor(private canvas: HTMLCanvasElement, private sound: Sound) {
     this.ctx = canvas.getContext("2d")!;
     this.resize();
-    addEventListener("resize", () => this.resize());
+    addEventListener("resize", () => this.resize(), { passive: true });
     requestAnimationFrame(this.loop);
   }
   get width(): number { return this.w; }
@@ -132,7 +137,7 @@ class Engine {
 
   private explode(x: number, y: number, shape: Shape, palette: Palette, scale: number): void {
     this.sound.boom(scale > 1.5);
-    const n = Math.round((reduced ? 40 : isMobile ? 70 : 130) * scale);
+    const n = Math.round((reduced ? 25 : isMobile ? 45 : 100) * scale);
     const k = Math.sqrt(scale);
     if (shape === "heart") {
       const m = Math.round(n * 1.2);
@@ -375,7 +380,7 @@ document.addEventListener("pointerdown", (e) => {
   if ((e.target as HTMLElement).closest("button,a,.glass,.frame-wrap")) return;
   sound.unlock();
   skyClick(e.clientX, e.clientY);
-});
+}, { passive: true });
 $("#burst").addEventListener("click", () => { sound.unlock(); burstSky(); });
 
 /* diyas */
@@ -476,7 +481,10 @@ soundBtn.addEventListener("click", () => {
 /* init */
 buildStars(); buildLights(); buildPetals(); buildRangoli(); buildDiyas();
 let rz: number | undefined;
-addEventListener("resize", () => { clearTimeout(rz); rz = window.setTimeout(buildLights, 200); });
+addEventListener("resize", () => {
+  clearTimeout(rz);
+  rz = window.setTimeout(buildLights, 200);
+}, { passive: true });
 setTimeout(() => engine.launch(engine.width * 0.5, engine.height * 0.3, "circle"), 600);
 setTimeout(autoShow, 1400);
 void started;
